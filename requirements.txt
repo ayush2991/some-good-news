@@ -1,7 +1,7 @@
 streamlit>=1.45.0
 pandas>=2.2.3
 serpapi>=0.1.5
-datetime>=80.1.0
+datetime>=5.5
 transformers>=4.51.3
 logging>=0.4.9.6
 altair>=5.5.0
