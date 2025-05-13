@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 .streamlit
 
->>>>>>> e880ce0 (security fix)
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
