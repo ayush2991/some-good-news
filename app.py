@@ -55,19 +55,35 @@ def format_news_data(news_data):
     df = pd.DataFrame(formatted_data)
     return df
 
+@st.cache_resource(show_spinner="Loading sentiment model...")
+def get_sentiment_pipeline():
+    """
+    Load and cache the sentiment analysis pipeline.
+    """
+    logging.info("Initializing sentiment analysis model: distilbert-base-uncased-finetuned-sst-2-english")
+    return pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+
 @st.cache_data(ttl=timedelta(days=7))
-def score_sentiment(df):
+def score_sentiment(df, _sentiment_pipeline):
     """
     Score the sentiment of the news articles using a sentiment analysis model from Hugging Face.
     """
+    sentiments = _sentiment_pipeline(df["title"].tolist())
+
+    # Process sentiments: 'POSITIVE' scores are positive, 'NEGATIVE' scores are negative.
+    # The score from the model is a confidence value (0 to 1).
+    processed_scores = []
+    for s in sentiments:
+        if s["label"] == "POSITIVE":
+            processed_scores.append(s["score"])
+        elif s["label"] == "NEGATIVE":
+            processed_scores.append(-s["score"])
+        else: # Should ideally not happen with this model for binary sentiment
+            processed_scores.append(0) 
+    df["positivity_score"] = processed_scores
     
-    # Apply sentiment analysis to the "title" column
-    sentiment_pipeline = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
-    sentiments = sentiment_pipeline(df["title"].tolist())
-    # Map the sentiments back to the dataframe
-    df["positivity_score"] = [s["score"]+1 for s in sentiments if s["label"] == "positive"] + [-s["score"]-1 for s in sentiments if s["label"] == "negative"] + [s["score"]-1 for s in sentiments if s["label"] == "neutral"]
     # standardize the positivity score
-    df["positivity_score"] = (df["positivity_score"] - df["positivity_score"].mean()) / df["positivity_score"].std()
+    #df["positivity_score"] = (df["positivity_score"] - df["positivity_score"].mean()) / df["positivity_score"].std()
     return df
 
 def main():
@@ -75,9 +91,13 @@ def main():
         page_title="Some Good News", # center title
         page_icon=":newspaper:", # set icon
         initial_sidebar_state="expanded", # set sidebar to expanded
+        layout="wide", # set layout to wide
     )
     
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Load the sentiment pipeline once
+    sentiment_model = get_sentiment_pipeline()
     
     with st.sidebar:
         st.header("Filter News")
@@ -88,13 +108,15 @@ def main():
     st.title(":newspaper: Some Good News")
 
     if st.button("Fetch News"):
-        news_data = fetch_news(country=country, language=language, category=category)
+        with st.spinner("Fetching news articles..."):
+            news_data = fetch_news(country=country, language=language, category=category)
         if not news_data:
             st.error("No news articles found.")
             return
         st.expander("View JSON Data").json(news_data, expanded=True)
         df = format_news_data(news_data)
-        df = score_sentiment(df)
+        with st.spinner("Scoring sentiment in news articles..."):
+            df = score_sentiment(df, sentiment_model)
         df = df.sort_values(by="positivity_score", ascending=False)
 
         st.write("### Top News Articles")
